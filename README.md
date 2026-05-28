@@ -1,6 +1,7 @@
 <div align="center">
 
-# Escuela Politécnica Nacional
+<h1><strong>Escuela Politécnica Nacional</strong></h1>
+
 ### Facultad de Ingeniería de Sistemas
 
 **Business Intelligence (ISWD743) · GR2SW_2026-1**
@@ -30,13 +31,9 @@ José Arias · Andrea Chicaiza · Andreina Pallo · Juan Quisilema · Juan Suár
 </div>
 
 ---
+<h2><strong>Tabla de contenidos</strong></h2>
 
-## Tabla de contenidos
-
-- [Escuela Politécnica Nacional](#escuela-politécnica-nacional)
-    - [Facultad de Ingeniería de Sistemas](#facultad-de-ingeniería-de-sistemas)
 - [Mercado Laboral y Vivienda en Ecuador](#mercado-laboral-y-vivienda-en-ecuador)
-  - [Tabla de contenidos](#tabla-de-contenidos)
   - [Introducción](#introducción)
   - [Objetivo](#objetivo)
   - [Datasets](#datasets)
