@@ -1,5 +1,8 @@
 <div align="center">
 
+<img src="capturas/logo_epn.png" height="80" align="left"/>
+<img src="capturas/logo_fis.png" height="80" align="right"/>
+
 <h1><strong>Escuela Politécnica Nacional</strong></h1>
 
 ### Facultad de Ingeniería de Sistemas
@@ -238,4 +241,4 @@ Con base en los datos disponibles, se definieron cinco preguntas de negocio orie
 ---
 ## Referencias Bibliográficas   
 <a name="referencias"></a>
-[1] Instituto Nacional de Estadística y Censos (INEC), "Estadísticas Laborales – abril 2026: Encuesta Nacional de Empleo, Desempleo y Subempleo (ENEMDU)," INEC Ecuador, 2026. [En línea]. Disponible en: https://www.ecuadorencifras.gob.ec/estadisticas-laborales-enemdu/ [Accedido: may. 2026].
+[1] Instituto Nacional de Estadística y Censos (INEC), "Estadísticas Laborales – abril 2026: Encuesta Nacional de Empleo, Desempleo y Subempleo (ENEMDU)," INEC Ecuador, 2026. [En línea]. Disponible en: https://www.ecuadorencifras.gob.ec/estadisticas-laborales-enemdu/ [Accedido: 27 de Mayo, 2026].
