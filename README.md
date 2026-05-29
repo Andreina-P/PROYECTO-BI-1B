@@ -66,7 +66,16 @@ La Encuesta Nacional de Empleo, Desempleo y Subempleo (ENEMDU) es el principal i
 
 ## Objetivo
 
-Desarrollar una solución de inteligencia de negocios que recolecte datos reales del Ecuador, los transforme y cargue en un modelo analítico (ETL) en Pentaho y muestre reportes OLAP en Power BI.
+### Objetivo General
+
+Desarrollar una solución de inteligencia de negocios end-to-end sobre los datos de la ENEMDU Q1 2026, que integre un proceso ETL completo en Pentaho Data Integration, un modelo dimensional de tipo constelación en PostgreSQL, y reportes OLAP interactivos en Power BI, con el fin de analizar la situación del mercado laboral y las condiciones de vivienda en el Ecuador durante el primer trimestre de 2026.
+
+### Objetivos Específicos
+
+- Implementar un proceso ETL que extraiga, limpie y cargue los datos de `persona_corregido.csv` y `vivienda_limpio.csv` desde staging hasta un modelo dimensional validado en PostgreSQL.
+- Diseñar un esquema constelación con dos tablas de hechos (`fact_situacion_laboral` y `fact_condicion_hogar`) y seis dimensiones, justificando las decisiones de granularidad, surrogate keys y normalización.
+- Construir un dashboard OLAP en Power BI con visualizaciones interactivas que respondan las cuatro preguntas de negocio definidas.
+- Identificar hallazgos concretos sobre empleo, ingresos y acceso a servicios básicos en el Ecuador, y formular recomendaciones de negocio  basadas en los datos.
 
 ---
 
@@ -310,11 +319,41 @@ Ambas transformaciones comparten la misma estructura: **CSV file input → Table
 
 > **Nota sobre el BOM:** Los archivos CSV fueron guardados originalmente con codificación UTF-8 BOM por Excel, lo que introducía el carácter invisible `﻿` al inicio del nombre de la primera columna. Esto fue corregido convirtiendo ambos archivos a UTF-8 sin BOM mediante Notepad++ antes de la carga.
 
-> **Nota sobre los IDs:** Los campos `id_persona`, `id_hogar` e `id_vivienda` contienen códigos INEC de 19–21 dígitos que Excel almacenó en notación científica (`1.015E+20`). Para preservar el valor completo sin pérdida de precisión, estos campos se leyeron como **String** en el CSV file input y se almacenaron como `VARCHAR(25)` en PostgreSQL.
+> **Nota sobre los IDs:** Los campos `id_persona`, `id_hogar` e `id_vivienda` contienen códigos INEC de 19–21 dígitos que Excel almacenó en notación científica (`1.015E+20`).
 
 ---
 
 #### `load_stg_persona` — Carga de personas a staging
+
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE stg_persona (
+    id_persona          VARCHAR(25),
+    id_hogar            VARCHAR(25),
+    id_vivienda         VARCHAR(25),
+    periodo             INTEGER,
+    area                VARCHAR(10),
+    ciudad              INTEGER,
+    sexo                VARCHAR(10),
+    edad                INTEGER,
+    nivel_instruccion   VARCHAR(30),
+    condicion_actividad VARCHAR(30),
+    empleo              VARCHAR(10),
+    desempleo           VARCHAR(10),
+    sector_empleo       VARCHAR(20),
+    rama_actividad      VARCHAR(60),
+    grupo_ocupacional   VARCHAR(60),
+    ingreso_laboral     NUMERIC(10,2),
+    ingreso_percapita   NUMERIC(10,2),
+    factor_expansion    NUMERIC(15,6),
+    cod_provincia       INTEGER,
+    provincia           VARCHAR(20),
+    anio                SMALLINT,
+    mes                 SMALLINT,
+    mes_nombre          VARCHAR(10)
+);
+```
 
 **Canvas:**
 
@@ -336,6 +375,31 @@ Ambas transformaciones comparten la misma estructura: **CSV file input → Table
 ---
 
 #### `load_stg_vivienda` — Carga de viviendas a staging
+
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE stg_vivienda (
+    id_hogar            VARCHAR(25),
+    periodo             INTEGER,
+    area                VARCHAR(10),
+    ciudad              INTEGER,
+    tipo_vivienda       VARCHAR(40),
+    material_piso       VARCHAR(30),
+    material_paredes    VARCHAR(30),
+    servicio_sanitario  VARCHAR(30),
+    fuente_agua         VARCHAR(40),
+    tipo_alumbrado      VARCHAR(30),
+    eliminacion_basura  INTEGER,
+    tenencia_vivienda   INTEGER,
+    factor_expansion    NUMERIC(15,6),
+    cod_provincia       INTEGER,
+    provincia           VARCHAR(20),
+    anio                SMALLINT,
+    mes                 SMALLINT,
+    mes_nombre          VARCHAR(10)
+);
+```
 
 **Canvas:**
 
@@ -362,6 +426,18 @@ Ambas transformaciones comparten la misma estructura: **CSV file input → Table
 
 #### `dim_tiempo` — Dimensión temporal
 
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE dim_tiempo (
+    id_tiempo           INTEGER         PRIMARY KEY,
+    anio                SMALLINT        NOT NULL,
+    mes                 SMALLINT        NOT NULL,
+    mes_nombre          VARCHAR(10)     NOT NULL,
+    orden_mes           SMALLINT        NOT NULL
+);
+```
+
 **Canvas:**
 
 | ![ktr_dim_tiempo](capturas/dim_tiempo.png) |
@@ -385,6 +461,18 @@ Ambas transformaciones comparten la misma estructura: **CSV file input → Table
 
 #### `dim_geografia` — Dimensión geográfica
 
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE dim_geografia (
+    id_geografia        SERIAL          PRIMARY KEY,
+    cod_provincia       INTEGER         NOT NULL,
+    provincia           VARCHAR(20)     NOT NULL,
+    area                VARCHAR(10)     NOT NULL,
+    ciudad              VARCHAR(10)
+);
+```
+
 **Canvas:**
 
 | ![ktr_dim_geografia](capturas/dim_geografia.png) |
@@ -407,6 +495,17 @@ Ambas transformaciones comparten la misma estructura: **CSV file input → Table
 ---
 
 #### `dim_persona` — Dimensión persona
+
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE dim_persona (
+    id_persona          SERIAL          PRIMARY KEY,
+    sexo                VARCHAR(10)     NOT NULL,
+    grupo_etario        VARCHAR(30)     NOT NULL,
+    nivel_instruccion   VARCHAR(30)     NOT NULL
+);
+```
 
 **Canvas:**
 
@@ -432,6 +531,18 @@ Ambas transformaciones comparten la misma estructura: **CSV file input → Table
 ---
 
 #### `dim_ocupacion` — Dimensión laboral
+
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE dim_ocupacion (
+    id_ocupacion        SERIAL          PRIMARY KEY,
+    condicion_actividad VARCHAR(30)     NOT NULL,
+    sector_empleo       VARCHAR(20)     NOT NULL,
+    rama_actividad      VARCHAR(60)     NOT NULL,
+    grupo_ocupacional   VARCHAR(60)     NOT NULL
+);
+```
 
 **Canvas:**
 
@@ -460,6 +571,18 @@ Ambas transformaciones comparten la misma estructura: **CSV file input → Table
 ---
 
 #### `dim_tipo_vivienda` — Dimensión de características físicas
+
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE dim_tipo_vivienda (
+    id_tipo_vivienda    SERIAL          PRIMARY KEY,
+    tipo_vivienda       VARCHAR(40)     NOT NULL,
+    material_piso       VARCHAR(30)     NOT NULL,
+    material_paredes    VARCHAR(30)     NOT NULL,
+    tenencia_vivienda   VARCHAR(50)     NOT NULL
+);
+```
 
 **Canvas:**
 
@@ -502,6 +625,18 @@ Ambas transformaciones comparten la misma estructura: **CSV file input → Table
 
 #### `dim_servicios_basicos` — Dimensión de servicios
 
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE dim_servicios_basicos (
+    id_servicios        SERIAL          PRIMARY KEY,
+    fuente_agua         VARCHAR(40)     NOT NULL,
+    tipo_alumbrado      VARCHAR(30)     NOT NULL,
+    servicio_sanitario  VARCHAR(30)     NOT NULL,
+    eliminacion_basura  VARCHAR(40)     NOT NULL
+);
+```
+
 **Canvas:**
 
 | ![ktr_dim_servicios](capturas/dim_servicios.png) |
@@ -542,6 +677,25 @@ Las transformaciones de hechos son las más complejas del proceso ETL. Cada una 
 ---
 
 #### `fact_situacion_laboral` — Hecho laboral
+
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE fact_situacion_laboral (
+    id_situacion_laboral    SERIAL              PRIMARY KEY,
+    nk_persona              VARCHAR(25)         NOT NULL,
+    nk_hogar                VARCHAR(25)         NOT NULL,
+    id_tiempo               INTEGER             NOT NULL    REFERENCES dim_tiempo(id_tiempo),
+    id_geografia            INTEGER             NOT NULL    REFERENCES dim_geografia(id_geografia),
+    id_persona              INTEGER             NOT NULL    REFERENCES dim_persona(id_persona),
+    id_ocupacion            INTEGER             NOT NULL    REFERENCES dim_ocupacion(id_ocupacion),
+    empleo                  SMALLINT            NOT NULL,
+    desempleo               SMALLINT            NOT NULL,
+    ingreso_laboral         NUMERIC(10,2),
+    ingreso_percapita       NUMERIC(10,2),
+    factor_expansion        NUMERIC(15,6)       NOT NULL
+);
+```
 
 **Canvas:**
 
@@ -586,6 +740,23 @@ Las transformaciones de hechos son las más complejas del proceso ETL. Cada una 
 ---
 
 #### `fact_condicion_hogar` — Hecho de vivienda
+
+**DDL de la tabla:**
+
+```sql
+CREATE TABLE fact_condicion_hogar (
+    id_condicion_hogar      SERIAL              PRIMARY KEY,
+    nk_hogar                VARCHAR(25)         NOT NULL,
+    id_tiempo               INTEGER             NOT NULL    REFERENCES dim_tiempo(id_tiempo),
+    id_geografia            INTEGER             NOT NULL    REFERENCES dim_geografia(id_geografia),
+    id_tipo_vivienda        INTEGER             NOT NULL    REFERENCES dim_tipo_vivienda(id_tipo_vivienda),
+    id_servicios            INTEGER             NOT NULL    REFERENCES dim_servicios_basicos(id_servicios),
+    agua_potable            SMALLINT            NOT NULL,
+    electricidad_red        SMALLINT            NOT NULL,
+    saneamiento_adecuado    SMALLINT            NOT NULL,
+    factor_expansion        NUMERIC(15,6)       NOT NULL
+);
+```
 
 **Canvas:**
 
@@ -662,6 +833,16 @@ dim_ocupacion + dim_servicios_basicos  ──✓──→  fact_situacion_labora
 - `dim_tiempo` y `dim_geografia` deben cargarse **antes** que cualquier otra dimensión o fact (son referenciadas por ambas facts).
 - Las facts solo se ejecutan cuando **todas** sus dimensiones existen y están pobladas — cualquier FK sin match generaría un error de integridad referencial.
 - El job puede re-ejecutarse de forma segura: todas las transformaciones tienen *Truncate table* activado, por lo que los datos anteriores se limpian antes de cada carga.
+
+---
+
+### Evidencia de tablas cargadas en PostgreSQL
+
+La siguiente imagen muestra el panel de objetos de **pgAdmin** con las 10 tablas del modelo dimensional creadas y pobladas en la base de datos **DbEnemdu**, schema `public`.
+
+| ![todas las tablas](capturas/tablas_postgresql.png) |
+| :---: |
+| *Figura 18: Tablas del modelo dimensional en DbEnemdu — pgAdmin* |
 
 
 ---
