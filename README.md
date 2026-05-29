@@ -476,6 +476,32 @@ Estas funcionalidades permitieron realizar análisis interactivos y responder pr
 ---
 ## 5. Recomendaciones al negocio
 
+Con base en los hallazgos obtenidos mediante el análisis OLAP realizado sobre los datos ENEMDU Q1 2026, se proponen las siguientes recomendaciones orientadas a políticas públicas y toma de decisiones estratégicas:
+
+### 1. Fortalecer programas de empleo en zonas rurales
+
+Los resultados muestran diferencias importantes entre zonas urbanas y rurales en indicadores de empleo e ingresos.
+Se recomienda fortalecer programas de inserción laboral y capacitación técnica en sectores rurales para reducir las brechas territoriales identificadas.
+
+### 2. Impulsar políticas de igualdad salarial
+
+La existencia de diferencias salariales según sexo y nivel educativo evidencia la necesidad de promover políticas de igualdad de oportunidades y transparencia salarial, especialmente en sectores económicos donde la brecha es más significativa.
+
+### 3. Priorizar inversión en servicios básicos
+
+Las provincias con menor acceso a agua potable y saneamiento adecuado requieren atención prioritaria mediante inversión pública en infraestructura básica y cobertura de servicios esenciales.
+
+### 4. Mantener monitoreo periódico del mercado laboral
+
+El análisis temporal demuestra que los indicadores laborales presentan variaciones mensuales relevantes.
+Se recomienda mantener procesos de monitoreo continuo utilizando herramientas de Business Intelligence que permitan detectar tendencias de manera temprana.
+
+### 5. Consolidar plataformas de análisis basadas en BI
+
+La implementación de un modelo dimensional junto con Power BI permitió integrar múltiples dimensiones de análisis y facilitar la exploración interactiva de datos.
+Se recomienda continuar utilizando arquitecturas BI para apoyar procesos de planificación, evaluación y toma de decisiones basadas en evidencia.
+
+
 
 ---
 ---
