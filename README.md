@@ -190,7 +190,6 @@ Con base en los datos disponibles, se definieron cinco preguntas de negocio orie
 | **P2** | ¿Existe una brecha salarial significativa según sexo, nivel de instrucción y sector de empleo? |
 | **P3** | ¿Qué porcentaje de hogares carece de agua potable, electricidad de red pública o saneamiento adecuado, y cómo se distribuye por provincia? |
 | **P4** | ¿Cómo evolucionaron las tasas de empleo y desempleo mes a mes durante enero, febrero y marzo de 2026? |
-| **P5** | ¿Existe correlación entre el índice de acceso a servicios básicos de un hogar y el ingreso per cápita de sus miembros? |
 
 ---
 
@@ -270,15 +269,399 @@ El diagrama a continuación representa la estructura completa del modelo dimensi
 ---
 ## 3. Proceso ETL
 
+El proceso ETL fue implementado en **Pentaho Data Integration (PDI)** mediante 10 transformaciones (`.ktr`) y un job orquestador (`.kjb`). La base de datos de destino es **DbEnemdu** en PostgreSQL, organizada en un único schema `public` con convención de nombres por prefijo: `stg_` para staging, `dim_` para dimensiones y `fact_` para tablas de hechos.
+
+Al inicio de cada transformación se configuró la **conexión a DbEnemdu** con los parámetros del servidor PostgreSQL local. Esta conexión se reutilizó en todos los pasos Table input, Database lookup y Table output de cada `.ktr`.
+
+
+| ![conexión a db de postgresql](capturas/conexionDB.png) |
+| :---: |
+| *Figura 4: Conexión a DB* |
+
+El orden de ejecución es estricto y responde a las dependencias del modelo: las tablas de staging deben existir antes de cargar dimensiones, y todas las dimensiones deben estar completas antes de cargar las facts, ya que éstas referencian a las dimensiones mediante claves foráneas.
+
+```
+FASE 1 — Staging
+  load_stg_persona.ktr      → stg_persona    (82.894 filas)
+  load_stg_vivienda.ktr     → stg_vivienda   (26.354 filas)
+
+FASE 2 — Dimensiones compartidas
+  dim_tiempo.ktr       → dim_tiempo     (3 filas)
+  dim_geografia.ktr    → dim_geografia  (711 filas)
+
+FASE 3 — Dimensiones exclusivas
+  dim_persona.ktr      → dim_persona    (62 filas)
+  dim_ocupacion.ktr    → dim_ocupacion  (968 filas)
+  dim_tipo_vivienda.ktr    → dim_tipo_vivienda     (275 filas)
+  dim_servicios.ktr        → dim_servicios_basicos (137 filas)
+
+FASE 4 — Tablas de hechos
+  fact_situacion_laboral.ktr → fact_situacion_laboral (82.894 filas)
+  fact_condicion_hogar.ktr   → fact_condicion_hogar   (26.354 filas)
+```
+
+---
+
 ### 3.1 Staging
+
+Las tablas de staging son réplicas exactas de los CSV fuente: mismos nombres de columna, mismo orden, sin transformaciones de negocio. Su propósito es aterrizar los datos en bruto en PostgreSQL para que las transformaciones posteriores operen sobre SQL en lugar de sobre archivos planos, lo que garantiza reproducibilidad y trazabilidad.
+
+Ambas transformaciones comparten la misma estructura: **CSV file input → Table output**, con la opción *Truncate table* activada para garantizar idempotencia en re-ejecuciones.
+
+> **Nota sobre el BOM:** Los archivos CSV fueron guardados originalmente con codificación UTF-8 BOM por Excel, lo que introducía el carácter invisible `﻿` al inicio del nombre de la primera columna. Esto fue corregido convirtiendo ambos archivos a UTF-8 sin BOM mediante Notepad++ antes de la carga.
+
+> **Nota sobre los IDs:** Los campos `id_persona`, `id_hogar` e `id_vivienda` contienen códigos INEC de 19–21 dígitos que Excel almacenó en notación científica (`1.015E+20`). Para preservar el valor completo sin pérdida de precisión, estos campos se leyeron como **String** en el CSV file input y se almacenaron como `VARCHAR(25)` en PostgreSQL.
+
+---
+
+#### `load_stg_persona` — Carga de personas a staging
+
+**Canvas:**
+
+| ![load_stg_persona](capturas/stg_persona.png) |
+| :---: |
+| *Figura 5: Transformación load_stg_persona — CSV file input → Table output* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | CSV file input | Archivo: `persona_corregido.csv` · Encoding: UTF-8 · Delimiter: `,` · Header row: ✓ · `id_persona`, `id_hogar`, `id_vivienda` → String · `empleo`, `desempleo` → String (llegan como `"True"`/`"False"`) · `ingreso_laboral`, `ingreso_percapita`, `factor_expansion` → Number |
+| 2 | Table output | Tabla: `stg_persona` · Truncate table: ✓ · Mapeo automático por nombre de columna |
+
+**Transformaciones aplicadas:** Ninguna — carga directa sin modificaciones de negocio.
+
+**Row count resultante:** 82.894 filas.
+
+---
+
+#### `load_stg_vivienda` — Carga de viviendas a staging
+
+**Canvas:**
+
+| ![load_stg_vivienda](capturas/stg_vivienda.png) |
+| :---: |
+| *Figura 6: Transformación load_stg_vivienda — CSV file input → Table output* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | CSV file input | Archivo: `vivienda_limpio.csv` · Encoding: UTF-8 · `id_hogar` → String · `eliminacion_basura`, `tenencia_vivienda` → Integer (códigos sin decodificar) · `factor_expansion` → Number |
+| 2 | Table output | Tabla: `stg_vivienda` · Truncate table: ✓ |
+
+**Transformaciones aplicadas:** Ninguna — `eliminacion_basura` y `tenencia_vivienda` se preservan como códigos enteros para decodificarlos en Pentaho durante la carga de dimensiones.
+
+**Row count resultante:** 26.354 filas.
+
+---
 
 ### 3.2 Dimensiones (tiempo, geografía, persona, ocupación)
 
+---
+
+#### `dim_tiempo` — Dimensión temporal
+
+**Canvas:**
+
+| ![ktr_dim_tiempo](capturas/dim_tiempo.png) |
+| :---: |
+| *Figura 7: Transformación dim_tiempo — Table input → Calculator → Select values → Table output* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | Table input | `SELECT DISTINCT periodo, anio, mes, mes_nombre FROM stg_persona ORDER BY periodo` |
+| 2 | Calculator | Nuevo campo `orden_mes` = copia de `mes` (tipo Integer) — necesario como Sort Column explícito en Power BI |
+| 3 | Select values | Selecciona y tipifica: `periodo` (Integer), `anio` (Integer), `mes` (Integer), `mes_nombre` (String), `orden_mes` (Integer) |
+| 4 | Table output | Tabla: `dim_tiempo` · Truncate: ✓ · Mapeo: `periodo → id_tiempo` |
+
+**Transformaciones aplicadas:** Derivación de `orden_mes` a partir de `mes`. La PK `id_tiempo` toma el valor YYYYMM directamente (clave inteligente) — no usa SERIAL.
+
+**Row count resultante:** 3 filas (202601, 202602, 202603).
+
+---
+
+#### `dim_geografia` — Dimensión geográfica
+
+**Canvas:**
+
+| ![ktr_dim_geografia](capturas/dim_geografia.png) |
+| :---: |
+| *Figura 8: Transformación dim_geografia — Table input → Sort rows → Unique rows → Table output* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | Table input | `UNION` de combinaciones únicas `(cod_provincia, provincia, area, ciudad)` de `stg_persona` y `stg_vivienda` — se combinan ambas fuentes para garantizar completitud de la dimensión compartida |
+| 2 | Sort rows | Ordenación por `cod_provincia`, `area`, `ciudad` |
+| 3 | Unique rows | Deduplicación por los 4 campos |
+| 4 | Table output | Tabla: `dim_geografia` · Truncate: ✓ · `id_geografia` generado por SERIAL |
+
+**Transformaciones aplicadas:** `UNION` entre ambos datasets fuente. Se usa el código numérico de provincia y ciudad directamente (sin conversión a VARCHAR) conforme a la definición final de la tabla.
+
+**Row count resultante:** 711 filas.
+
+---
+
+#### `dim_persona` — Dimensión persona
+
+**Canvas:**
+
+| ![ktr_dim_persona](capturas/dim_persona.png) |
+| :---: |
+| *Figura 9: Transformación dim_persona — Table input → If field value is null → Modified JavaScript Value → Sort rows → Unique rows → Table output* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | Table input | `SELECT sexo, edad, nivel_instruccion FROM stg_persona` |
+| 2 | If field value is null | `nivel_instruccion` NULL → `'Sin información'` (4.137 registros con `condicion_actividad = 'Sin información'`) |
+| 3 | Modified JavaScript Value | Derivación de `grupo_etario` a partir de `edad`: `<15` → `'Menor de 15 años'`; `15–24`; `25–34`; `35–44`; `45–54`; `55–64`; `≥65` → `'65 y más'` |
+| 4 | Sort rows | Ordenación por `sexo`, `grupo_etario`, `nivel_instruccion` |
+| 5 | Unique rows | Deduplicación por los 3 campos |
+| 6 | Table output | Tabla: `dim_persona` · Truncate: ✓ · `edad` no se carga — solo `grupo_etario` pasa al DWH |
+
+**Transformaciones aplicadas:** Imputación de NULLs en `nivel_instruccion`. Discretización de `edad` (variable continua 0–98) en 7 bandas etarias INEC mediante script JavaScript. La columna `edad` se descarta del DWH — no tiene consumidor analítico directo.
+
+**Row count resultante:** 62 filas (combinaciones únicas reales de sexo × grupo etario × instrucción).
+
+---
+
+#### `dim_ocupacion` — Dimensión laboral
+
+**Canvas:**
+
+| ![ktr_dim_ocupacion](capturas/dim_ocupacion.png) |
+| :---: |
+| *Figura 10: Transformación dim_ocupacion — Table input → If field value is null → Sort rows → Unique rows → Table output* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | Table input | `SELECT condicion_actividad, sector_empleo, rama_actividad, grupo_ocupacional FROM stg_persona` |
+| 2 | If field value is null | `sector_empleo`, `rama_actividad`, `grupo_ocupacional` NULL → `'No aplica'` (42.974 personas fuera de PEA ocupada) |
+| 3 | Sort rows | Ordenación por los 4 campos |
+| 4 | Unique rows | Deduplicación por los 4 campos |
+| 5 | Table output | Tabla: `dim_ocupacion` · Truncate: ✓ |
+
+**Transformaciones aplicadas:** Imputación de NULLs estructurales con `'No aplica'`. Los NULLs no son errores de datos — corresponden a personas fuera de la PEA para quienes las preguntas de ocupación no aplican.
+
+**Row count resultante:** 968 filas (combinaciones únicas de condición × sector × rama × grupo).
+
+---
+
 ### 3.3 Dimensiones (vivienda, servicios)
+
+---
+
+#### `dim_tipo_vivienda` — Dimensión de características físicas
+
+**Canvas:**
+
+| ![ktr_dim_tipo_vivienda](capturas/TI2_dim_tipo_vivienda.png) |
+| :---: |
+| *Figura 11: Table Input dentro de la transformación dim_tipo_vivienda* |
+
+
+| ![ktr_dim_tipo_vivienda](capturas/dim_tipo_vivienda.png) |
+| :---: |
+| *Figura 12: Transformación dim_tipo_vivienda — Table input → Stream lookup → Sort rows → Unique rows → Table output* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | Table input | `SELECT tipo_vivienda, material_piso, material_paredes, tenencia_vivienda FROM stg_vivienda` |
+| 2 | Table input 2 (diccionario) | VALUES en línea con el diccionario INEC de tenencia: códigos 1–6 → etiquetas descriptivas |
+| 3 | Stream lookup | Key: `tenencia_vivienda = codigo` · Return: `etiqueta` → `tenencia_vivienda_desc` |
+| 4 | Sort rows | Ordenación por `tipo_vivienda`, `material_piso`, `material_paredes`, `tenencia_vivienda_desc` |
+| 5 | Unique rows | Deduplicación por los 4 campos |
+| 6 | Table output | Tabla: `dim_tipo_vivienda` · Truncate: ✓ · Mapeo: `tenencia_vivienda_desc → tenencia_vivienda` |
+
+**Transformaciones aplicadas:** Decodificación de `tenencia_vivienda` mediante Stream lookup con diccionario INEC en memoria. Los códigos enteros (1–6) se sustituyen por etiquetas legibles antes de cargar la dimensión.
+
+**Diccionario tenencia_vivienda:**
+
+| Código | Etiqueta |
+|---|---|
+| 1 | Propia y totalmente pagada |
+| 2 | Propia y la están pagando |
+| 3 | Propia (regalada/heredada/posesión) |
+| 4 | Arrendada |
+| 5 | Prestada o cedida (no pagada) |
+| 6 | Por servicios |
+
+**Row count resultante:** 275 filas.
+
+---
+
+#### `dim_servicios_basicos` — Dimensión de servicios
+
+**Canvas:**
+
+| ![ktr_dim_servicios](capturas/dim_servicios.png) |
+| :---: |
+| *Figura 13: Transformación ktr_dim_servicios_basicos — Table input → Stream lookup → Sort rows → Unique rows → Table output* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | Table input | `SELECT fuente_agua, tipo_alumbrado, servicio_sanitario, eliminacion_basura FROM stg_vivienda` |
+| 2 | Table input 2 (diccionario) | VALUES en línea con el diccionario INEC de basura: códigos 1–5 → etiquetas descriptivas |
+| 3 | Stream lookup | Key: `eliminacion_basura = codigo` · Return: `etiqueta` → `eliminacion_basura_desc` |
+| 4 | Sort rows | Ordenación por los 4 campos |
+| 5 | Unique rows | Deduplicación |
+| 6 | Table output | Tabla: `dim_servicios_basicos` · Truncate: ✓ · Mapeo: `eliminacion_basura_desc → eliminacion_basura` |
+
+**Transformaciones aplicadas:** Decodificación de `eliminacion_basura` mediante Stream lookup. Los campos `fuente_agua`, `tipo_alumbrado` y `servicio_sanitario` ya llegaron decodificados desde el CSV — se cargan directamente.
+
+**Diccionario eliminacion_basura:**
+
+| Código | Etiqueta |
+|---|---|
+| 1 | Carro recolector |
+| 2 | Terreno baldío o quebrada |
+| 3 | Quema |
+| 4 | Entierra |
+| 5 | Río / acequia / canal |
+
+**Row count resultante:** 137 filas.
+
+---
 
 ### 3.4 Tablas de hechos
 
+Las transformaciones de hechos son las más complejas del proceso ETL. Cada una realiza 4 **Database lookups** en cadena para resolver las surrogate keys de las dimensiones, partiendo de los datos de staging. A diferencia del Stream lookup (que carga la tabla en memoria), el Database lookup consulta directamente a PostgreSQL por cada fila, lo que es correcto para dimensiones ya persistidas en la base de datos.
+
+---
+
+#### `fact_situacion_laboral` — Hecho laboral
+
+**Canvas:**
+
+| ![ktr_fact_sl](capturas/fact_situacion_laboral.png) |
+| :---: |
+| *Figura 14: Transformación fact_situacion_laboral — flujo completo con 4 Database lookups* |
+
+| ![ktr_fact_sl](capturas/DL_fact_situacion_laboral.png) |
+| :---: |
+| *Figura 15: Transformación fact_situacion_laboral — Database lookup* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | Table input | `SELECT id_persona, id_hogar, periodo, cod_provincia, area, ciudad, sexo, edad, nivel_instruccion, condicion_actividad, empleo, desempleo, sector_empleo, rama_actividad, grupo_ocupacional, ingreso_laboral, ingreso_percapita, factor_expansion FROM stg_persona` |
+| 2 | If field value is null | `sector_empleo`, `rama_actividad`, `grupo_ocupacional` → `'No aplica'` · `nivel_instruccion` → `'Sin información'` |
+| 3 | Modified JavaScript Value | Derivar `grupo_etario` desde `edad` (misma lógica que dim_persona) · Convertir `empleo` y `desempleo` de `"true"`/`"false"` a Integer `1`/`0` |
+| 4 | Database lookup (dim_tiempo) | Tabla: `dim_tiempo` · Key: `id_tiempo = periodo` · Return: `id_tiempo` |
+| 5 | Database lookup (dim_geografia) | Tabla: `dim_geografia` · Keys: `cod_provincia`, `area`, `ciudad` · Return: `id_geografia` |
+| 6 | Database lookup (dim_persona) | Tabla: `dim_persona` · Keys: `sexo`, `grupo_etario`, `nivel_instruccion` · Return: `id_persona` |
+| 7 | Database lookup (dim_ocupacion) | Tabla: `dim_ocupacion` · Keys: `condicion_actividad`, `sector_empleo`, `rama_actividad`, `grupo_ocupacional` · Return: `id_ocupacion` |
+| 8 | Select values | Selecciona únicamente los campos de la fact; renombra `id_persona (VARCHAR)` → `nk_persona` e `id_hogar` → `nk_hogar` para eliminar conflicto de nombres con las FKs |
+| 9 | Table output | Tabla: `fact_situacion_laboral` · Truncate: ✓ · Mapeo manual completo |
+
+**Transformaciones aplicadas:**
+- Imputación de NULLs estructurales (sector, rama, grupo, instrucción)
+- Discretización de `edad` → `grupo_etario`
+- Conversión de `empleo` y `desempleo` de String booleano a SMALLINT 0/1
+- Resolución de 4 surrogate keys mediante Database lookup
+
+**Verificación de integridad:**
+
+| Consulta | Resultado |
+|---|---|
+| `SELECT COUNT(*) FROM fact_situacion_laboral` | **82.894** |
+| NULLs en `id_tiempo` | **0** |
+| NULLs en `id_geografia` | **0** |
+| NULLs en `id_persona` | **0** |
+| NULLs en `id_ocupacion` | **0** |
+
+---
+
+#### `fact_condicion_hogar` — Hecho de vivienda
+
+**Canvas:**
+
+| ![ktr_fact_ch](capturas/fact_condicion_hogar.png) |
+| :---: |
+| *Figura 16: Transformación ktr_fact_condicion_hogar — flujo completo con Stream lookups y 4 Database lookups* |
+
+**Pasos:**
+
+| # | Paso | Configuración clave |
+|---|---|---|
+| 1 | Table input | `SELECT id_hogar, periodo, cod_provincia, area, ciudad, tipo_vivienda, material_piso, material_paredes, tenencia_vivienda, fuente_agua, tipo_alumbrado, servicio_sanitario, eliminacion_basura, factor_expansion FROM stg_vivienda` |
+| 2 | Stream lookup (tenencia) | Decodifica `tenencia_vivienda` (códigos 1–6) → `tenencia_vivienda_desc` |
+| 3 | Stream lookup (basura) | Decodifica `eliminacion_basura` (códigos 1–5) → `eliminacion_basura_desc` |
+| 4 | Modified JavaScript Value | Calcula los 3 flags: `agua_potable` (1 si `fuente_agua = 'Red pública'`) · `electricidad_red` (1 si `tipo_alumbrado = 'Red de empresa eléctrica'`) · `saneamiento_adecuado` (1 si `servicio_sanitario = 'Conectado a red pública'`) |
+| 5 | Database lookup (dim_tiempo) | Key: `id_tiempo = periodo` · Return: `id_tiempo` |
+| 6 | Database lookup (dim_geografia) | Keys: `cod_provincia`, `area`, `ciudad` · Return: `id_geografia` |
+| 7 | Database lookup (dim_tipo_vivienda) | Keys: `tipo_vivienda`, `material_piso`, `material_paredes`, `tenencia_vivienda_desc` · Return: `id_tipo_vivienda` |
+| 8 | Database lookup (dim_servicios_basicos) | Keys: `fuente_agua`, `tipo_alumbrado`, `servicio_sanitario`, `eliminacion_basura_desc` · Return: `id_servicios` |
+| 9 | Select values | Selecciona campos de la fact |
+| 10 | Table output | Tabla: `fact_condicion_hogar` · Truncate: ✓ · Mapeo: `id_hogar → nk_hogar` |
+
+**Transformaciones aplicadas:**
+- Decodificación de `tenencia_vivienda` y `eliminacion_basura` mediante Stream lookup (mismo diccionario que las dims, para garantizar coincidencia exacta en el Database lookup posterior)
+- Derivación de 3 flags binarios (medidas directas de P3) mediante JavaScript
+- Resolución de 4 surrogate keys mediante Database lookup
+
+**Verificación de integridad:**
+
+| Consulta | Resultado |
+|---|---|
+| `SELECT COUNT(*) FROM fact_condicion_hogar` | **26.354** |
+| NULLs en `id_tiempo` | **0** |
+| NULLs en `id_geografia` | **0** |
+| NULLs en `id_tipo_vivienda` | **0** |
+| NULLs en `id_servicios` | **0** |
+
+---
+
 ### 3.5 Job principal
+
+El job `kjb_enemdu_main.kjb` orquesta la ejecución de las 10 transformaciones en el orden correcto, respetando las dependencias del modelo dimensional. Cada nodo del job es una llamada a una transformación `.ktr`; los conectores de éxito (✓ verde) garantizan que una fase no comienza hasta que la anterior terminó sin errores.
+
+**Canvas:**
+
+| ![job_principal](capturas/jb_enemdu_main.png) |
+| :---: |
+| *Figura 17: Job kjb_enemdu_main — orquestación completa de las 3 fases ETL* |
+
+**Estructura del job:**
+
+**Fase 1 — Staging** *(carga de datos brutos)*
+
+```
+load_stg_persona  ──✓──→  load_stg_vivienda
+```
+
+**Fase 2 — Dimensiones** *(orden obligatorio: compartidas primero)*
+
+```
+load_stg_vivienda  ──✓──→     dim_tiempo  ──✓──→  dim_geografia
+                               ──✓──→  dim_persona  ──✓──→  dim_ocupacion
+                               ──✓──→  dim_tipo_vivienda  ──✓──→  dim_servicios_basicos
+```
+
+**Fase 3 — Tablas de hechos** *(solo cuando todas las dims están cargadas)*
+
+```
+dim_ocupacion + dim_servicios_basicos  ──✓──→  fact_situacion_laboral
+                                                ──✓──→  fact_condicion_hogar
+```
+
+**Regla de dependencias:**
+- `dim_tiempo` y `dim_geografia` deben cargarse **antes** que cualquier otra dimensión o fact (son referenciadas por ambas facts).
+- Las facts solo se ejecutan cuando **todas** sus dimensiones existen y están pobladas — cualquier FK sin match generaría un error de integridad referencial.
+- El job puede re-ejecutarse de forma segura: todas las transformaciones tienen *Truncate table* activado, por lo que los datos anteriores se limpian antes de cada carga.
 
 
 ---
