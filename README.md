@@ -890,9 +890,9 @@ AVERAGE(FACT_SITUACION_LABORAL[ingreso_laboral])
 * Las provincias con mayor actividad económica muestran ingresos laborales promedio superiores al promedio nacional.
 * Las diferencias territoriales evidencian concentración económica en determinadas regiones del país.
 
-|                                 ![P1](capturas/p1_powerbi.png)                                 |
+|                                 ![P1](https://github.com/Andreina-P/PROYECTO-BI-1B/blob/main/capturas/Pregunta%201%20Proyecto.png?raw=true)                                 |
 | :--------------------------------------------------------------------------------------------: |
-| *Figura X. Dashboard OLAP para análisis de empleo e ingresos por provincia y área geográfica.* |
+| *Figura 19. Dashboard OLAP para análisis de empleo e ingresos por provincia y área geográfica.* |
 
 ---
 
@@ -932,9 +932,9 @@ DIVIDE(
 * El nivel de instrucción superior incrementa significativamente el ingreso promedio.
 * La brecha salarial es más evidente en ciertos sectores económicos.
 
-|                           ![P2](capturas/p2_powerbi.png)                          |
+|                           ![P2](https://github.com/Andreina-P/PROYECTO-BI-1B/blob/main/capturas/Pregunta%202%20Proyecto.png?raw=true)                          |
 | :-------------------------------------------------------------------------------: |
-| *Figura X. Dashboard OLAP para análisis de brecha salarial por sexo y educación.* |
+| *Figura 20. Dashboard OLAP para análisis de brecha salarial por sexo y educación.* |
 
 ---
 
@@ -982,9 +982,9 @@ DIVIDE(
 * Algunas provincias mantienen brechas importantes en saneamiento y acceso a agua potable.
 * El acceso a electricidad posee mayor cobertura respecto a otros servicios básicos.
 
-|                ![P3](capturas/p3_powerbi.png)                |
+|                ![P3](https://github.com/Andreina-P/PROYECTO-BI-1B/blob/main/capturas/Pregunta%203%20Proyecto.png?raw=true)                |
 | :----------------------------------------------------------: |
-| *Figura X. Dashboard OLAP sobre acceso a servicios básicos.* |
+| *Figura 21. Dashboard OLAP sobre acceso a servicios básicos.* |
 
 ---
 
@@ -1015,9 +1015,9 @@ DIVIDE(
 * Se identifican fluctuaciones relacionadas con dinámicas económicas temporales.
 * El análisis temporal evidencia la utilidad de la dimensión tiempo en modelos OLAP.
 
-|                      ![P4](capturas/p4_powerbi.png)                      |
+|                      ![P4](https://github.com/Andreina-P/PROYECTO-BI-1B/blob/main/capturas/Pregunta%204%20Proyecto.png?raw=true)                      |
 | :----------------------------------------------------------------------: |
-| *Figura X. Dashboard OLAP de evolución temporal del empleo y desempleo.* |
+| *Figura 22. Dashboard OLAP de evolución temporal del empleo y desempleo.* |
 
 ---
 
