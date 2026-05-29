@@ -207,7 +207,7 @@ Con base en los datos disponibles, se definieron cinco preguntas de negocio orie
 ---
 ## 2. Justificación de diseño y modelado dimensional
 
-### Por qué constelación
+### 2.1 Por qué constelación
  
 El modelo dimensional elegido para este proyecto es el **modelo constelación**, también conocido como esquema de galaxia. Esta decisión responde a una característica estructural del conjunto de datos ENEMDU Q1 2026 los dos datasets fuente `persona_corregido.csv` y `vivienda_limpio.csv` que describen **procesos de negocio distintos con granularidades diferentes**, lo cual hace inviable tanto un esquema estrella simple como un esquema copo de nieve.
  
@@ -224,7 +224,7 @@ Adicionalmente, la integridad referencial entre ambas fuentes es del **100 %**. 
  
 ---
  
-### Las 6 dimensiones del modelo y cuáles son compartidas
+### 2.2 Las 6 dimensiones del modelo y cuáles son compartidas
  
 El modelo está compuesto por **6 dimensiones**, de las cuales 2 son compartidas por ambas tablas de hechos y 4 son exclusivas de una de ellas.
  
@@ -233,7 +233,7 @@ El modelo está compuesto por **6 dimensiones**, de las cuales 2 son compartidas
 Estas dimensiones actúan como el núcleo de la constelación. En Power BI, un único slicer sobre cualquiera de ellas filtra simultáneamente `FACT_SITUACION_LABORAL` y `FACT_CONDICION_HOGAR`, permitiendo responder preguntas que cruzan la situación laboral con las condiciones del hogar.
  
 **`DIM_TIEMPO`**
-Construida a partir de las columnas `periodo`, `mes`, `mes_nombre` y `anio` presentes en ambos datasets. Se añade en Pentaho la columna derivada `orden_mes` (valores 1, 2, 3) para garantizar el ordenamiento cronológico correcto en los ejes de tiempo de Power BI, ya que el nombre del mes en texto ordena alfabonéticamente por defecto. Cardinalidad: 3 registros (Enero, Febrero, Marzo 2026).
+Construida a partir de las columnas `mes`, `mes_nombre` y `anio` presentes en ambos datasets. Se añade en Pentaho la columna derivada `orden_mes` (valores 1, 2, 3) para garantizar el ordenamiento cronológico correcto en los ejes de tiempo de Power BI, ya que el nombre del mes en texto ordena alfabonéticamente por defecto. Cardinalidad: 3 registros (Enero, Febrero, Marzo 2026).
  
 **`DIM_GEOGRAFIA`**
 Construida a partir de `area`, `provincia`, `cod_provincia` y `ciudad`. La columna `area` (Rural / Urbano) es el slicer geográfico principal para las preguntas de análisis P1 y P3. La columna `ciudad` contiene el código INEC (fórmula: `cod_provincia × 10.000 + parroquia`) y requiere un catálogo externo del INEC para resolver los nombres de parroquia; su cardinalidad es de 587 valores. La columna `provincia` —con sus 24 categorías— habilita visualizaciones de mapa de coropletas en Power BI. Los valores son idénticos entre ambos datasets para el mismo hogar (0 inconsistencias verificadas).
@@ -249,7 +249,7 @@ Contiene los atributos del mercado laboral: `condicion_actividad` (10 categoría
 #### Dimensiones exclusivas de `FACT_CONDICION_HOGAR`
  
 **`DIM_TIPO_VIVIENDA`**
-Contiene las características físicas de la unidad habitacional: `tipo_vivienda` (7 categorías: Casa o villa, Departamento, Mediagua, Rancho, Cuarto inquilinato, Covacha, Choza/Otro), `material_piso` (8 categorías), `material_paredes` (7 categorías) y `tenencia_vivienda`. Esta última llega como códigos numéricos 1–6 y requiere decodificación en Pentaho mediante Stream Lookup con el diccionario INEC. Se deriva además el flag `es_vivienda_adecuada` en Pentaho.
+Contiene las características físicas de la unidad habitacional: `tipo_vivienda` (7 categorías: Casa o villa, Departamento, Mediagua, Rancho, Cuarto inquilinato, Covacha, Choza/Otro), `material_piso` (8 categorías), `material_paredes` (7 categorías) y `tenencia_vivienda`. Esta última llega como códigos numéricos 1–6 y requiere decodificación en Pentaho mediante Stream Lookup con el diccionario INEC.
  
 **`DIM_SERVICIOS_BASICOS`**
 Contiene el acceso a servicios públicos del hogar: `fuente_agua` (7 categorías, ya decodificada), `tipo_alumbrado` (4 categorías, ya decodificada), `servicio_sanitario` (5 categorías, ya decodificada) y `eliminacion_basura` (códigos 1–5, pendiente de decodificar en Pentaho). En Pentaho se derivan tres flags binarios: `agua_potable` (fuente_agua = "Red pública"), `electricidad_red` (tipo_alumbrado = "Red empresa eléctrica") y `saneamiento_adecuado` (servicio_sanitario = "Conectado a red pública"). Estos flags son las medidas directas para responder la pregunta P3.
@@ -260,51 +260,12 @@ Contiene el acceso a servicios públicos del hogar: `fuente_agua` (7 categorías
  
 El diagrama a continuación representa la estructura completa del modelo dimensional. Las tablas de hechos se ubican al centro; las dimensiones compartidas en la parte superior; las dimensiones exclusivas, agrupadas por tabla de hechos, en la parte inferior. Las relaciones son todas de tipo **muchos-a-uno** desde la tabla de hechos hacia la dimensión (notación: `*` → `1`).
  
-```
-                    ┌─────────────┐        ┌──────────────────┐
-                    │  DIM_TIEMPO │        │  DIM_GEOGRAFIA   │
-                    │─────────────│        │──────────────────│
-                    │ SK_tiempo   │        │ SK_geografia      │
-                    │ periodo     │        │ area              │
-                    │ mes         │        │ provincia         │
-                    │ mes_nombre  │        │ cod_provincia     │
-                    │ anio        │        │ ciudad            │
-                    │ orden_mes   │        └────────┬─────────┘
-                    └──────┬──────┘                 │
-                           │     (compartidas)      │
-              ┌────────────┴──────────┬─────────────┘
-              │                       │
-              ▼                       ▼
-┌─────────────────────────┐   ┌─────────────────────────┐
-│  FACT_SITUACION_LABORAL │   │  FACT_CONDICION_HOGAR   │
-│─────────────────────────│   │─────────────────────────│
-│ FK_tiempo               │   │ FK_tiempo               │
-│ FK_geografia            │   │ FK_geografia             │
-│ FK_persona              │   │ SK_hogar (id_hogar)      │
-│ FK_ocupacion            │   │ FK_tipo_vivienda         │
-│ SK_persona (id_persona) │   │ FK_servicios_basicos     │
-│ id_hogar (FK → FACT_CH) │   │─────────────────────────│
-│─────────────────────────│   │ agua_potable (flag)      │
-│ empleo (0/1)            │   │ electricidad_red (flag)  │
-│ desempleo (0/1)         │   │ saneamiento_adecuado     │
-│ ingreso_laboral         │   │ factor_expansion         │
-│ ingreso_percapita       │   └──────┬──────────────────┘
-│ factor_expansion        │          │
-└──────┬──────────────────┘          │
-       │                         ┌───┴────────────────┐   ┌───────────────────────┐
-  ┌────┴───────┐  ┌───────────┐  │  DIM_TIPO_VIVIENDA │   │  DIM_SERVICIOS_BASICOS│
-  │ DIM_PERSONA│  │DIM_OCUP.  │  │────────────────────│   │───────────────────────│
-  │────────────│  │───────────│  │ SK_tipo_vivienda   │   │ SK_servicios          │
-  │ SK_persona │  │ SK_ocup.  │  │ tipo_vivienda      │   │ fuente_agua           │
-  │ sexo       │  │ condicion │  │ material_piso      │   │ tipo_alumbrado        │
-  │ nivel_ins. │  │ sector    │  │ material_paredes   │   │ servicio_sanitario    │
-  │ grupo_et.  │  │ rama      │  │ tenencia_vivienda  │   │ eliminacion_basura    │
-  └────────────┘  │ grupo_oc. │  └────────────────────┘   └───────────────────────┘
-                  └───────────┘
-```
+ | ![Diseño esquema constelación](capturas/Diseño_modelo_contelacion.png) |
+| :---: |
+| *Figura 3: Diseño de esquema constelación* |
  
 > **Nota:** La relación entre `FACT_SITUACION_LABORAL` y `FACT_CONDICION_HOGAR` a través de `id_hogar` no es una relación dimensional estándar; representa la integridad referencial del dataset de origen. En Power BI esta relación no se activa como relación de filtro entre facts; los cruces se realizan mediante medidas DAX que unen ambas facts a través de las dimensiones compartidas.
- 
+
 
 ---
 ## 3. Proceso ETL
