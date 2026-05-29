@@ -323,6 +323,192 @@ El diagrama a continuación representa la estructura completa del modelo dimensi
 ---
 ---
 ## 4. Análisis de insights (OLAP)
+En esta fase del proyecto se utilizó Power BI Desktop para construir visualizaciones OLAP interactivas sobre el modelo dimensional implementado en PostgreSQL.
+Las dimensiones compartidas `DIM_TIEMPO` y `DIM_GEOGRAFIA` permitieron analizar simultáneamente los procesos de negocio relacionados con empleo y condiciones de vivienda mediante filtros dinámicos (slicers), jerarquías y medidas DAX.
+
+Las preguntas de negocio P1–P4 fueron respondidas mediante dashboards analíticos construidos sobre las tablas de hechos `FACT_SITUACION_LABORAL` y `FACT_CONDICION_HOGAR`.
+
+---
+
+### P1. ¿Cómo varía la tasa de empleo y el ingreso laboral promedio entre zonas urbanas y rurales, y entre provincias?
+
+Para responder esta pregunta se construyó un dashboard comparativo utilizando:
+
+* Segmentadores por provincia y área geográfica.
+* Gráficos de barras para comparar la tasa de empleo.
+* Tarjetas KPI para ingreso laboral promedio.
+* Mapa geográfico por provincias.
+
+Las medidas utilizadas en Power BI fueron:
+
+```DAX
+Total Empleados =
+SUMX(
+    FACT_SITUACION_LABORAL,
+    FACT_SITUACION_LABORAL[empleo] *
+    FACT_SITUACION_LABORAL[factor_expansion]
+)
+
+Tasa Empleo =
+DIVIDE(
+    [Total Empleados],
+    SUM(FACT_SITUACION_LABORAL[factor_expansion])
+)
+
+Ingreso Promedio =
+AVERAGE(FACT_SITUACION_LABORAL[ingreso_laboral])
+```
+
+### Hallazgos
+
+* Las zonas urbanas presentan mayores niveles de empleo formal en comparación con las zonas rurales.
+* Las provincias con mayor actividad económica muestran ingresos laborales promedio superiores al promedio nacional.
+* Las diferencias territoriales evidencian concentración económica en determinadas regiones del país.
+
+|                                 ![P1](capturas/p1_powerbi.png)                                 |
+| :--------------------------------------------------------------------------------------------: |
+| *Figura X. Dashboard OLAP para análisis de empleo e ingresos por provincia y área geográfica.* |
+
+---
+
+### P2. ¿Existe una brecha salarial significativa según sexo, nivel de instrucción y sector de empleo?
+
+Para esta pregunta se utilizaron:
+
+* Gráficos de barras agrupadas.
+* Segmentadores por sexo y nivel educativo.
+* Comparación de ingresos promedio entre hombres y mujeres.
+
+### Medidas utilizadas
+
+```DAX
+Ingreso Promedio Hombre =
+CALCULATE(
+    AVERAGE(FACT_SITUACION_LABORAL[ingreso_laboral]),
+    DIM_PERSONA[sexo] = "Hombre"
+)
+
+Ingreso Promedio Mujer =
+CALCULATE(
+    AVERAGE(FACT_SITUACION_LABORAL[ingreso_laboral]),
+    DIM_PERSONA[sexo] = "Mujer"
+)
+
+Brecha Salarial % =
+DIVIDE(
+    [Ingreso Promedio Hombre] - [Ingreso Promedio Mujer],
+    [Ingreso Promedio Hombre]
+)
+```
+
+### Hallazgos
+
+* Existe una diferencia salarial observable entre hombres y mujeres en múltiples sectores laborales.
+* El nivel de instrucción superior incrementa significativamente el ingreso promedio.
+* La brecha salarial es más evidente en ciertos sectores económicos.
+
+|                           ![P2](capturas/p2_powerbi.png)                          |
+| :-------------------------------------------------------------------------------: |
+| *Figura X. Dashboard OLAP para análisis de brecha salarial por sexo y educación.* |
+
+---
+
+### P3. ¿Qué porcentaje de hogares carece de agua potable, electricidad de red pública o saneamiento adecuado, y cómo se distribuye por provincia?
+
+Se construyeron visualizaciones geográficas y gráficos comparativos para evaluar el acceso a servicios básicos.
+
+### Medidas utilizadas
+
+```DAX
+% Agua Potable =
+DIVIDE(
+    SUMX(
+        FACT_CONDICION_HOGAR,
+        FACT_CONDICION_HOGAR[agua_potable] *
+        FACT_CONDICION_HOGAR[factor_expansion]
+    ),
+    SUM(FACT_CONDICION_HOGAR[factor_expansion])
+)
+
+% Electricidad =
+DIVIDE(
+    SUMX(
+        FACT_CONDICION_HOGAR,
+        FACT_CONDICION_HOGAR[electricidad_red] *
+        FACT_CONDICION_HOGAR[factor_expansion]
+    ),
+    SUM(FACT_CONDICION_HOGAR[factor_expansion])
+)
+
+% Saneamiento =
+DIVIDE(
+    SUMX(
+        FACT_CONDICION_HOGAR,
+        FACT_CONDICION_HOGAR[saneamiento_adecuado] *
+        FACT_CONDICION_HOGAR[factor_expansion]
+    ),
+    SUM(FACT_CONDICION_HOGAR[factor_expansion])
+)
+```
+
+### Hallazgos
+
+* Las zonas rurales presentan menor acceso a servicios básicos.
+* Algunas provincias mantienen brechas importantes en saneamiento y acceso a agua potable.
+* El acceso a electricidad posee mayor cobertura respecto a otros servicios básicos.
+
+|                ![P3](capturas/p3_powerbi.png)                |
+| :----------------------------------------------------------: |
+| *Figura X. Dashboard OLAP sobre acceso a servicios básicos.* |
+
+---
+
+### P4. ¿Cómo evolucionaron las tasas de empleo y desempleo durante enero, febrero y marzo de 2026?
+
+Se utilizaron gráficos de líneas temporales utilizando la dimensión `DIM_TIEMPO`.
+
+### Medidas utilizadas
+
+```DAX
+Total Desempleados =
+SUMX(
+    FACT_SITUACION_LABORAL,
+    FACT_SITUACION_LABORAL[desempleo] *
+    FACT_SITUACION_LABORAL[factor_expansion]
+)
+
+Tasa Desempleo =
+DIVIDE(
+    [Total Desempleados],
+    SUM(FACT_SITUACION_LABORAL[factor_expansion])
+)
+```
+
+### Hallazgos
+
+* Las tasas de empleo y desempleo muestran variaciones mensuales moderadas durante el trimestre.
+* Se identifican fluctuaciones relacionadas con dinámicas económicas temporales.
+* El análisis temporal evidencia la utilidad de la dimensión tiempo en modelos OLAP.
+
+|                      ![P4](capturas/p4_powerbi.png)                      |
+| :----------------------------------------------------------------------: |
+| *Figura X. Dashboard OLAP de evolución temporal del empleo y desempleo.* |
+
+---
+
+### Uso de funcionalidades OLAP en Power BI
+
+Durante el análisis se utilizaron capacidades OLAP propias de Power BI:
+
+* Segmentadores dinámicos (Slicers)
+* Drill-down jerárquico por provincia y tiempo
+* Medidas DAX
+* KPIs
+* Visualizaciones geográficas
+* Filtros cruzados entre dimensiones compartidas
+* Exploración multidimensional de hechos
+
+Estas funcionalidades permitieron realizar análisis interactivos y responder preguntas de negocio de manera visual y eficiente.
 
 
 ---
