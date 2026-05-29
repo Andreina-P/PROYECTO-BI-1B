@@ -366,7 +366,7 @@ CREATE TABLE stg_persona (
 | # | Paso | Configuración clave |
 |---|---|---|
 | 1 | CSV file input | Archivo: `persona_corregido.csv` · Encoding: UTF-8 · Delimiter: `,` · Header row: ✓ · `id_persona`, `id_hogar`, `id_vivienda` → String · `empleo`, `desempleo` → String (llegan como `"True"`/`"False"`) · `ingreso_laboral`, `ingreso_percapita`, `factor_expansion` → Number |
-| 2 | Table output | Tabla: `stg_persona` · Truncate table: ✓ · Mapeo automático por nombre de columna |
+| 2 | Table output | Tabla: `stg_persona` ·  Mapeo automático por nombre de columna |
 
 **Transformaciones aplicadas:** Ninguna — carga directa sin modificaciones de negocio.
 
@@ -412,7 +412,7 @@ CREATE TABLE stg_vivienda (
 | # | Paso | Configuración clave |
 |---|---|---|
 | 1 | CSV file input | Archivo: `vivienda_limpio.csv` · Encoding: UTF-8 · `id_hogar` → String · `eliminacion_basura`, `tenencia_vivienda` → Integer (códigos sin decodificar) · `factor_expansion` → Number |
-| 2 | Table output | Tabla: `stg_vivienda` · Truncate table: ✓ |
+| 2 | Table output | Tabla: `stg_vivienda`  |
 
 **Transformaciones aplicadas:** Ninguna — `eliminacion_basura` y `tenencia_vivienda` se preservan como códigos enteros para decodificarlos en Pentaho durante la carga de dimensiones.
 
@@ -451,7 +451,7 @@ CREATE TABLE dim_tiempo (
 | 1 | Table input | `SELECT DISTINCT periodo, anio, mes, mes_nombre FROM stg_persona ORDER BY periodo` |
 | 2 | Calculator | Nuevo campo `orden_mes` = copia de `mes` (tipo Integer) — necesario como Sort Column explícito en Power BI |
 | 3 | Select values | Selecciona y tipifica: `periodo` (Integer), `anio` (Integer), `mes` (Integer), `mes_nombre` (String), `orden_mes` (Integer) |
-| 4 | Table output | Tabla: `dim_tiempo` · Truncate: ✓ · Mapeo: `periodo → id_tiempo` |
+| 4 | Table output | Tabla: `dim_tiempo` ·  Mapeo: `periodo → id_tiempo` |
 
 **Transformaciones aplicadas:** Derivación de `orden_mes` a partir de `mes`. La PK `id_tiempo` toma el valor YYYYMM directamente (clave inteligente) — no usa SERIAL.
 
@@ -486,7 +486,7 @@ CREATE TABLE dim_geografia (
 | 1 | Table input | `UNION` de combinaciones únicas `(cod_provincia, provincia, area, ciudad)` de `stg_persona` y `stg_vivienda` — se combinan ambas fuentes para garantizar completitud de la dimensión compartida |
 | 2 | Sort rows | Ordenación por `cod_provincia`, `area`, `ciudad` |
 | 3 | Unique rows | Deduplicación por los 4 campos |
-| 4 | Table output | Tabla: `dim_geografia` · Truncate: ✓ · `id_geografia` generado por SERIAL |
+| 4 | Table output | Tabla: `dim_geografia` ·  `id_geografia` generado por SERIAL |
 
 **Transformaciones aplicadas:** `UNION` entre ambos datasets fuente. Se usa el código numérico de provincia y ciudad directamente (sin conversión a VARCHAR) conforme a la definición final de la tabla.
 
@@ -522,7 +522,7 @@ CREATE TABLE dim_persona (
 | 3 | Modified JavaScript Value | Derivación de `grupo_etario` a partir de `edad`: `<15` → `'Menor de 15 años'`; `15–24`; `25–34`; `35–44`; `45–54`; `55–64`; `≥65` → `'65 y más'` |
 | 4 | Sort rows | Ordenación por `sexo`, `grupo_etario`, `nivel_instruccion` |
 | 5 | Unique rows | Deduplicación por los 3 campos |
-| 6 | Table output | Tabla: `dim_persona` · Truncate: ✓ · `edad` no se carga — solo `grupo_etario` pasa al DWH |
+| 6 | Table output | Tabla: `dim_persona` ·  `edad` no se carga — solo `grupo_etario` pasa al DWH |
 
 **Transformaciones aplicadas:** Imputación de NULLs en `nivel_instruccion`. Discretización de `edad` (variable continua 0–98) en 7 bandas etarias INEC mediante script JavaScript. La columna `edad` se descarta del DWH — no tiene consumidor analítico directo.
 
@@ -558,7 +558,7 @@ CREATE TABLE dim_ocupacion (
 | 2 | If field value is null | `sector_empleo`, `rama_actividad`, `grupo_ocupacional` NULL → `'No aplica'` (42.974 personas fuera de PEA ocupada) |
 | 3 | Sort rows | Ordenación por los 4 campos |
 | 4 | Unique rows | Deduplicación por los 4 campos |
-| 5 | Table output | Tabla: `dim_ocupacion` · Truncate: ✓ |
+| 5 | Table output | Tabla: `dim_ocupacion`  |
 
 **Transformaciones aplicadas:** Imputación de NULLs estructurales con `'No aplica'`. Los NULLs no son errores de datos — corresponden a personas fuera de la PEA para quienes las preguntas de ocupación no aplican.
 
@@ -604,7 +604,7 @@ CREATE TABLE dim_tipo_vivienda (
 | 3 | Stream lookup | Key: `tenencia_vivienda = codigo` · Return: `etiqueta` → `tenencia_vivienda_desc` |
 | 4 | Sort rows | Ordenación por `tipo_vivienda`, `material_piso`, `material_paredes`, `tenencia_vivienda_desc` |
 | 5 | Unique rows | Deduplicación por los 4 campos |
-| 6 | Table output | Tabla: `dim_tipo_vivienda` · Truncate: ✓ · Mapeo: `tenencia_vivienda_desc → tenencia_vivienda` |
+| 6 | Table output | Tabla: `dim_tipo_vivienda` ·  Mapeo: `tenencia_vivienda_desc → tenencia_vivienda` |
 
 **Transformaciones aplicadas:** Decodificación de `tenencia_vivienda` mediante Stream lookup con diccionario INEC en memoria. Los códigos enteros (1–6) se sustituyen por etiquetas legibles antes de cargar la dimensión.
 
@@ -652,7 +652,7 @@ CREATE TABLE dim_servicios_basicos (
 | 3 | Stream lookup | Key: `eliminacion_basura = codigo` · Return: `etiqueta` → `eliminacion_basura_desc` |
 | 4 | Sort rows | Ordenación por los 4 campos |
 | 5 | Unique rows | Deduplicación |
-| 6 | Table output | Tabla: `dim_servicios_basicos` · Truncate: ✓ · Mapeo: `eliminacion_basura_desc → eliminacion_basura` |
+| 6 | Table output | Tabla: `dim_servicios_basicos` · Mapeo: `eliminacion_basura_desc → eliminacion_basura` |
 
 **Transformaciones aplicadas:** Decodificación de `eliminacion_basura` mediante Stream lookup. Los campos `fuente_agua`, `tipo_alumbrado` y `servicio_sanitario` ya llegaron decodificados desde el CSV — se cargan directamente.
 
@@ -719,7 +719,7 @@ CREATE TABLE fact_situacion_laboral (
 | 6 | Database lookup (dim_persona) | Tabla: `dim_persona` · Keys: `sexo`, `grupo_etario`, `nivel_instruccion` · Return: `id_persona` |
 | 7 | Database lookup (dim_ocupacion) | Tabla: `dim_ocupacion` · Keys: `condicion_actividad`, `sector_empleo`, `rama_actividad`, `grupo_ocupacional` · Return: `id_ocupacion` |
 | 8 | Select values | Selecciona únicamente los campos de la fact; renombra `id_persona (VARCHAR)` → `nk_persona` e `id_hogar` → `nk_hogar` para eliminar conflicto de nombres con las FKs |
-| 9 | Table output | Tabla: `fact_situacion_laboral` · Truncate: ✓ · Mapeo manual completo |
+| 9 | Table output | Tabla: `fact_situacion_laboral`  · Mapeo manual completo |
 
 **Transformaciones aplicadas:**
 - Imputación de NULLs estructurales (sector, rama, grupo, instrucción)
